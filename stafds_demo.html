@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#07111f" />
+<meta name="color-scheme" content="dark" />
+<title>STAFDS — Satellite Telemetry Analysis &amp; Fault Detection System</title>
+<style>
+  :root{
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --bg:#07111f;
+    --panel:#0d1826;
+    --panel-raised:#122036;
+    --border:#1e3049;
+    --text:#e7edf5;
+    --text-secondary:#9fb0c6;
+    --text-muted:#5f7086;
+    --nominal:#3ddc97;
+    --info:#4ea8de;
+    --warning:#f5b942;
+    --critical:#f24141;
+    --meta:#9d7ff2;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,"Inter",system-ui,sans-serif;
+    padding-top:var(--safe-top);
+    padding-bottom:var(--safe-bottom);
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;}
+  a{color:inherit;}
+  button{font-family:inherit;}
+
+  /* ---------- header ---------- */
+  header{
+    position:sticky;top:0;z-index:20;
+    background:rgba(13,24,38,.92);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--border);
+    padding:10px 16px;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+  }
+  header .brand h1{margin:0;font-size:15px;letter-spacing:.03em;font-weight:700;}
+  header .brand p{margin:1px 0 0;font-size:11px;color:var(--text-secondary);}
+  .badge{
+    display:flex;align-items:center;gap:6px;
+    border:1px solid var(--border);background:var(--panel);
+    border-radius:4px;padding:5px 10px;font-size:11px;letter-spacing:.04em;
+    white-space:nowrap;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;flex:none;}
+  .dot.on{background:var(--nominal);box-shadow:0 0 6px var(--nominal);}
+  .dot.off{background:var(--critical);}
+  .dot.mid{background:var(--meta);}
+
+  /* ---------- layout ---------- */
+  main{max-width:1400px;margin:0 auto;padding:14px 16px 90px;}
+  .statusbar{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+    margin-bottom:14px;
+  }
+  @media(min-width:900px){.statusbar{grid-template-columns:repeat(8,1fr);}}
+  .stat{
+    background:var(--panel);border:1px solid var(--border);border-radius:4px;
+    padding:8px 10px;min-width:0;
+  }
+  .stat .k{font-size:9px;letter-spacing:.06em;color:var(--text-muted);text-transform:uppercase;}
+  .stat .v{font-size:13px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  .grid{display:grid;gap:14px;grid-template-columns:1fr;}
+  @media(min-width:1000px){.grid{grid-template-columns:2fr 1fr;}}
+
+  .panel{
+    background:var(--panel);border:1px solid var(--border);border-radius:6px;
+    padding:14px;min-width:0;
+  }
+  .panel + .panel{margin-top:14px;}
+  .panel h2{
+    margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--text-secondary);display:flex;align-items:center;justify-content:space-between;
+  }
+  .panel h2 .hint{font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:400;}
+
+  /* ---------- scenario controls ---------- */
+  .scenario-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+  .scenario-btn{
+    background:var(--panel-raised);border:1px solid var(--border);color:var(--text-secondary);
+    border-radius:4px;padding:7px 11px;font-size:11px;cursor:pointer;letter-spacing:.02em;
+    transition:border-color .15s,color .15s;
+  }
+  .scenario-btn:hover{border-color:var(--info);color:var(--text);}
+  .scenario-btn.active{border-color:var(--info);color:var(--info);background:rgba(78,168,222,.08);}
+  .transport-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+  .icon-btn{
+    background:var(--panel-raised);border:1px solid var(--border);color:var(--text);
+    border-radius:4px;padding:7px 12px;font-size:12px;cursor:pointer;min-width:44px;min-height:36px;
+  }
+  .icon-btn:hover{border-color:var(--info);}
+  .icon-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .speed-select{
+    background:var(--panel-raised);border:1px solid var(--border);color:var(--text);
+    border-radius:4px;padding:7px 8px;font-size:12px;min-height:36px;
+  }
+  .scenario-desc{font-size:11px;color:var(--text-muted);margin-top:8px;line-height:1.5;}
+
+  /* ---------- telemetry cards ---------- */
+  .param-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  @media(min-width:640px){.param-grid{grid-template-columns:repeat(3,1fr);}}
+  @media(min-width:1300px){.param-grid{grid-template-columns:repeat(4,1fr);}}
+  .param{
+    background:var(--panel-raised);border:1px solid var(--border);border-left:3px solid var(--border);
+    border-radius:4px;padding:9px 10px;min-width:0;
+  }
+  .param.nominal{border-left-color:var(--nominal);}
+  .param.warning{border-left-color:var(--warning);}
+  .param.critical{border-left-color:var(--critical);}
+  .param .k{font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .param .v{font-size:17px;font-weight:700;margin-top:3px;}
+  .param .v .u{font-size:11px;font-weight:400;color:var(--text-muted);margin-left:2px;}
+  .param .status{font-size:9.5px;margin-top:3px;letter-spacing:.04em;}
+  .param.nominal .status{color:var(--nominal);}
+  .param.warning .status{color:var(--warning);}
+  .param.critical .status{color:var(--critical);}
+
+  /* ---------- charts ---------- */
+  .chart-tabs{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;}
+  .chart-tab{
+    background:transparent;border:1px solid var(--border);color:var(--text-muted);
+    border-radius:4px;padding:5px 9px;font-size:10.5px;cursor:pointer;
+  }
+  .chart-tab.active{color:var(--info);border-color:var(--info);}
+  canvas{width:100%;display:block;border-radius:4px;background:var(--panel-raised);touch-action:pan-y;}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:10.5px;color:var(--text-secondary);}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .legend i{width:10px;height:2px;display:inline-block;}
+
+  /* ---------- health score ---------- */
+  .health-wrap{display:flex;align-items:center;gap:16px;}
+  .health-num{font-size:38px;font-weight:800;font-family:"SFMono-Regular",monospace;line-height:1;}
+  .health-meta{flex:1;min-width:0;}
+  .health-state{font-size:12px;font-weight:700;letter-spacing:.04em;margin-bottom:6px;}
+  .health-bar{height:6px;border-radius:3px;background:var(--border);overflow:hidden;}
+  .health-bar-fill{height:100%;border-radius:3px;transition:width .4s ease;}
+
+  /* ---------- faults ---------- */
+  .fault-summary{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .fault-chip{border-radius:4px;padding:5px 10px;font-size:11px;font-weight:600;border:1px solid var(--border);}
+  .fault-chip.crit{color:var(--critical);border-color:rgba(242,65,65,.35);}
+  .fault-chip.warn{color:var(--warning);border-color:rgba(245,185,66,.35);}
+  .fault-chip.info{color:var(--info);border-color:rgba(78,168,222,.35);}
+  .fault-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;}
+  .fault-item{
+    background:var(--panel-raised);border:1px solid var(--border);border-left:3px solid var(--border);
+    border-radius:4px;padding:9px 10px;
+  }
+  .fault-item.CRITICAL{border-left-color:var(--critical);}
+  .fault-item.WARNING{border-left-color:var(--warning);}
+  .fault-item .row1{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;}
+  .fault-item .name{font-size:12px;font-weight:600;}
+  .fault-item .sev{font-size:9.5px;padding:2px 6px;border-radius:3px;white-space:nowrap;letter-spacing:.03em;}
+  .fault-item.CRITICAL .sev{color:var(--critical);background:rgba(242,65,65,.12);}
+  .fault-item.WARNING .sev{color:var(--warning);background:rgba(245,185,66,.12);}
+  .fault-item .desc{font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.5;}
+  .fault-item .meta{font-size:10px;color:var(--text-muted);margin-top:5px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+  .ack-btn{
+    margin-top:6px;background:transparent;border:1px solid var(--border);color:var(--text-secondary);
+    border-radius:3px;padding:4px 9px;font-size:10px;cursor:pointer;
+  }
+  .ack-btn:hover{border-color:var(--info);color:var(--info);}
+  .ack-btn:disabled{opacity:.35;cursor:default;}
+  .empty{font-size:11px;color:var(--text-muted);padding:16px 0;text-align:center;}
+
+  /* ---------- events ---------- */
+  .event-list{display:flex;flex-direction:column-reverse;gap:0;max-height:280px;overflow-y:auto;}
+  .event-row{
+    display:flex;gap:8px;padding:6px 0;border-bottom:1px solid rgba(30,48,73,.5);font-size:11px;
+  }
+  .event-row:first-child{border-bottom:none;}
+  .event-row .t{color:var(--text-muted);white-space:nowrap;font-family:monospace;font-size:10px;padding-top:1px;}
+  .event-row .m{color:var(--text-secondary);}
+  .event-row.fault .m{color:var(--warning);}
+  .event-row.crit .m{color:var(--critical);}
+  .event-row.recover .m{color:var(--nominal);}
+  .event-row.scn .m{color:var(--info);}
+
+  footer{
+    max-width:1400px;margin:0 auto;padding:16px;text-align:center;
+    border-top:1px solid var(--border);
+  }
+  footer p{margin:2px 0;font-size:11px;}
+  footer .p1{color:var(--text-secondary);font-weight:500;}
+  footer .p2{color:var(--text-muted);}
+
+  ::-webkit-scrollbar{width:6px;height:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+  @media (prefers-reduced-motion: reduce){
+    *{transition-duration:.01ms !important;}
+  }
+  :focus-visible{outline:2px solid var(--info);outline-offset:2px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1 class="mono">STAFDS</h1>
+    <p>Satellite Telemetry Analysis &amp; Fault Detection System</p>
+  </div>
+  <div class="badge" id="connBadge"><span class="dot on" id="connDot"></span><span id="connText">ONLINE</span></div>
+</header>
+
+<main>
+  <div class="statusbar mono">
+    <div class="stat"><div class="k">Mode</div><div class="v" id="statMode">NOMINAL</div></div>
+    <div class="stat"><div class="k">Scenario</div><div class="v" id="statScenario">NOMINAL</div></div>
+    <div class="stat"><div class="k">Uptime</div><div class="v" id="statUptime">00:00:00</div></div>
+    <div class="stat"><div class="k">Last Packet</div><div class="v" id="statLastPacket">--:--:--</div></div>
+    <div class="stat"><div class="k">Packets/sec</div><div class="v" id="statRate">0.0</div></div>
+    <div class="stat"><div class="k">Packet Count</div><div class="v" id="statCount">0</div></div>
+    <div class="stat"><div class="k">Database</div><div class="v" id="statDb" style="color:var(--nominal)">CONNECTED</div></div>
+    <div class="stat"><div class="k">Active Faults</div><div class="v" id="statFaults">0</div></div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT COLUMN -->
+    <div>
+      <div class="panel">
+        <h2>Scenario Control <span class="hint">deterministic · seed 42</span></h2>
+        <div class="scenario-row" id="scenarioRow"></div>
+        <div class="transport-row">
+          <button class="icon-btn" id="btnPlay">▶ Start</button>
+          <button class="icon-btn" id="btnPause" disabled>⏸ Pause</button>
+          <button class="icon-btn" id="btnStop" disabled>■ Stop</button>
+          <button class="icon-btn" id="btnReset">↺ Reset</button>
+          <select class="speed-select" id="speedSelect">
+            <option value="2000">0.5×</option>
+            <option value="1000" selected>1×</option>
+            <option value="500">2×</option>
+            <option value="200">5×</option>
+            <option value="100">10×</option>
+          </select>
+        </div>
+        <div class="scenario-desc" id="scenarioDesc"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Live Telemetry <span class="hint">raw values · updates each packet</span></h2>
+        <div class="param-grid" id="paramGrid"></div>
+      </div>
+
+      <div class="panel">
+        <h2>
+          <span>Trend Charts</span>
+          <span class="hint">raw + EMA filtered · threshold lines</span>
+        </h2>
+        <div class="chart-tabs" id="chartTabs"></div>
+        <canvas id="chartCanvas" height="220"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--text-muted)"></i>Raw</span>
+          <span><i style="background:var(--info)"></i>Filtered (EMA)</span>
+          <span><i style="background:var(--warning)"></i>Warning threshold</span>
+          <span><i style="background:var(--critical)"></i>Critical threshold</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div>
+      <div class="panel">
+        <h2>System Health</h2>
+        <div class="health-wrap">
+          <div class="health-num" id="healthNum" style="color:var(--nominal)">100</div>
+          <div class="health-meta">
+            <div class="health-state" id="healthState" style="color:var(--nominal)">NOMINAL</div>
+            <div class="health-bar"><div class="health-bar-fill" id="healthBarFill" style="width:100%;background:var(--nominal)"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Fault Center</h2>
+        <div class="fault-summary">
+          <div class="fault-chip crit">CRITICAL: <span id="critCount">0</span></div>
+          <div class="fault-chip warn">WARNING: <span id="warnCount">0</span></div>
+        </div>
+        <div class="fault-list" id="faultList">
+          <div class="empty">No active faults. All parameters nominal.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Event Log</h2>
+        <div class="event-list" id="eventList"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <p class="p1">STAFDS &bull; Telemetry Analysis &amp; Fault Detection Prototype</p>
+  <p class="p2">Software-only educational project &bull; Simulated telemetry &amp; rule-based diagnostic logic &bull; Not affiliated with ISRO, NASA, ESA, or any government organization</p>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ===================== deterministic RNG ===================== */
+  function mulberry32(seed){
+    return function(){
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  let rand = mulberry32(42);
+  function gaussian(){
+    // Box-Muller, using the deterministic RNG
+    const u1 = Math.max(rand(), 1e-9), u2 = rand();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  /* ===================== parameter definitions ===================== */
+  const PARAMS = {
+    internal_temperature:  {label:"Internal Temp",    unit:"°C",  min:-10, max:60, warn:45, crit:55, base:32},
+    battery_temperature:   {label:"Battery Temp",     unit:"°C",  min:-10, max:55, warn:40, crit:48, base:30},
+    battery_voltage:       {label:"Battery Voltage",  unit:"V",   min:9.0, max:16.8, warn:10.4, crit:9.6, isLow:true, base:11.9},
+    battery_current:       {label:"Battery Current",  unit:"A",   min:0, max:5, warn:2.6, crit:3.4, base:0.45},
+    solar_voltage:         {label:"Solar Voltage",    unit:"V",   min:0, max:24, warn:6, crit:2, isLow:true, base:18.2},
+    power_consumption:     {label:"Power Draw",       unit:"W",   min:0, max:20, warn:11, crit:15, base:5.0},
+    signal_strength:       {label:"Signal Strength",  unit:"dBm", min:-110, max:-40, warn:-90, crit:-100, isLow:true, base:-68},
+    packet_loss:           {label:"Packet Loss",      unit:"%",   min:0, max:100, warn:8, crit:25, base:0.4},
+    cpu_usage:              {label:"CPU Usage",        unit:"%",   min:0, max:100, warn:80, crit:92, base:31},
+    memory_usage:           {label:"Memory Usage",     unit:"%",   min:0, max:100, warn:82, crit:93, base:48},
+  };
+  const CHART_PARAMS = ["internal_temperature","battery_voltage","battery_current","solar_voltage","signal_strength"];
+
+  /* ===================== simulator state ===================== */
+  const state = {
+    running:false, paused:false,
+    scenario:"NOMINAL",
+    tick:0, packetCount:0, seq:0,
+    startedAt:null, lastPacketAt:null,
+    speedMs:1000,
+    orbitPhase:0,
+    values:{}, prevValues:{}, ema:{}, history:{},
+    faults:new Map(), faultSeq:0,
+    stuckCounters:{},
+    events:[],
+    intervalHandle:null,
+  };
+  Object.keys(PARAMS).forEach(k=>{
+    state.values[k]=PARAMS[k].base;
+    state.prevValues[k]=PARAMS[k].base;
+    state.ema[k]=PARAMS[k].base;
+    state.history[k]=[];
+    state.stuckCounters[k]=0;
+  });
+
+  const SCENARIOS = {
+    NOMINAL:{ label:"Nominal", desc:"All systems within normal operating range. Baseline drift and orbital daylight cycle only." },
+    OVERHEATING:{ label:"Overheating", desc:"Internal temperature ramps from baseline through WARNING and into CRITICAL, then holds. Demonstrates threshold-crossing fault detection." },
+    LOW_BATTERY:{ label:"Low Battery", desc:"Battery voltage decays under load while solar charging is reduced, crossing warning and critical thresholds from below." },
+    HIGH_CURRENT:{ label:"High Current", desc:"Battery current spikes while voltage falls and temperature rises — triggers the correlation rule for a power-system anomaly." },
+    COMM_LOSS:{ label:"Comm Loss", desc:"Signal strength degrades and packet loss climbs sharply, culminating in a simulated communication timeout." },
+    RECOVERY:{ label:"Recovery", desc:"All actively faulted parameters trend back toward nominal. Demonstrates fault-recovery lifecycle and health-score improvement." },
+  };
+
+  /* ===================== fault engine (rule-based, explainable) ===================== */
+  function evaluateThreshold(key, def, value){
+    const existing = [...state.faults.values()].find(f=>f.param===key && f.status!=="RECOVERED" && f.rule==="THRESHOLD");
+    let severity = null;
+    if (def.isLow){
+      if (value <= def.crit) severity = "CRITICAL";
+      else if (value <= def.warn) severity = "WARNING";
+    } else {
+      if (value >= def.crit) severity = "CRITICAL";
+      else if (value >= def.warn) severity = "WARNING";
+    }
+    // hysteresis band: 6% of range, to avoid alarm flapping right at the line
+    const band = Math.abs(def.max - def.min) * 0.03;
+
+    if (severity){
+      if (existing){
+        if (existing.severity !== severity){
+          existing.severity = severity;
+          existing.value = value;
+          existing.timestamp = nowIso();
+          logEvent("fault", `${PARAMS[key].label} escalated to ${severity} (${fmt(key,value)})`);
+        } else {
+          existing.value = value;
+        }
+      } else {
+        createFault(key, "THRESHOLD", severity, value,
+          `${PARAMS[key].label} crossed the ${severity.toLowerCase()} threshold (${fmt(key, def.isLow?def.warn:def.warn)} boundary). Observed ${fmt(key,value)}.`);
+      }
+    } else if (existing && existing.status !== "RECOVERED"){
+      // require clearing past hysteresis band before declaring recovery
+      const safeMargin = def.isLow ? value > def.warn + band : value < def.warn - band;
+      if (safeMargin){
+        recoverFault(existing);
+      }
+    }
+  }
+
+  function evaluateRateOfChange(key, value){
+    const prev = state.prevValues[key];
+    const delta = Math.abs(value - prev);
+    const def = PARAMS[key];
+    const range = def.max - def.min;
+    const rateLimit = range * 0.18; // >18% of full range in one sample = unrealistic jump
+    if (delta > rateLimit && state.tick > 2){
+      const existing = [...state.faults.values()].find(f=>f.param===key && f.status!=="RECOVERED" && f.rule==="RATE_OF_CHANGE");
+      if (!existing){
+        createFault(key, "RATE_OF_CHANGE", "WARNING", value,
+          `${PARAMS[key].label} changed by ${delta.toFixed(2)} in one sample interval — exceeds the configured realistic rate-of-change limit.`);
+      }
+    }
+  }
+
+  function evaluateStuckSensor(key, value){
+    const prev = state.prevValues[key];
+    if (Math.abs(value - prev) < 0.0005){
+      state.stuckCounters[key]++;
+    } else {
+      state.stuckCounters[key] = 0;
+    }
+    if (state.stuckCounters[key] === 12){
+      createFault(key, "STUCK_SENSOR", "WARNING", value,
+        `${PARAMS[key].label} has not changed for 12 consecutive samples — possible stuck sensor or frozen telemetry source.`);
+    }
+  }
+
+  function evaluateCorrelation(){
+    const current = state.values.battery_current;
+    const voltage = state.values.battery_voltage;
+    const temp = state.values.internal_temperature;
+    const currentHigh = current >= PARAMS.battery_current.warn;
+    const voltageFalling = voltage < 11.3;
+    const tempRising = temp > 36;
+    const key = "correlation:power_system";
+    const existing = [...state.faults.values()].find(f=>f.id===key && f.status!=="RECOVERED");
+    if (currentHigh && voltageFalling && tempRising){
+      if (!existing){
+        const f = {
+          id:key, param:"battery_current + battery_voltage + internal_temperature",
+          rule:"CORRELATION", code:"PWR-CORR-01",
+          severity:"CRITICAL", value:null,
+          desc:"High current, falling battery voltage, and rising temperature detected together — matches the power-system anomaly correlation rule.",
+          timestamp:nowIso(), status:"ACTIVE", ack:false, recoveredAt:null,
+        };
+        state.faults.set(key, f);
+        logEvent("crit", "Correlation rule triggered: possible power-system anomaly");
+      }
+    } else if (existing){
+      recoverFault(existing);
+    }
+  }
+
+  function createFault(key, rule, severity, value, desc){
+    const id = `${key}:${rule}:${state.faultSeq++}`;
+    const f = {
+      id, param:key, rule, severity, value,
+      code:`${key.slice(0,4).toUpperCase()}-${rule.slice(0,3)}`,
+      desc, timestamp:nowIso(), status:"ACTIVE", ack:false, recoveredAt:null,
+    };
+    state.faults.set(id, f);
+    logEvent(severity==="CRITICAL"?"crit":"fault", `${severity}: ${PARAMS[key] ? PARAMS[key].label : key} — ${f.rule.replace(/_/g," ").toLowerCase()}`);
+  }
+
+  function recoverFault(f){
+    f.status = "RECOVERED";
+    f.recoveredAt = nowIso();
+    logEvent("recover", `Fault recovered: ${PARAMS[f.param] ? PARAMS[f.param].label : f.param} (${f.rule.replace(/_/g," ").toLowerCase()})`);
+  }
+
+  function runFaultEngine(){
+    Object.keys(PARAMS).forEach(key=>{
+      evaluateThreshold(key, PARAMS[key], state.values[key]);
+      evaluateRateOfChange(key, state.values[key]);
+      evaluateStuckSensor(key, state.values[key]);
+    });
+    evaluateCorrelation();
+  }
+
+  /* ===================== health score ===================== */
+  function computeHealthScore(){
+    let score = 100;
+    let critCount=0, warnCount=0;
+    for (const f of state.faults.values()){
+      if (f.status === "RECOVERED") continue;
+      if (f.severity === "CRITICAL"){ score -= 25; critCount++; }
+      else if (f.severity === "WARNING"){ score -= 10; warnCount++; }
+    }
+    if (state.values.packet_loss > 15) score -= Math.min(20, (state.values.packet_loss-15) * 1.2);
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    return {score, critCount, warnCount};
+  }
+
+  /* ===================== telemetry simulation ===================== */
+  function scenarioInject(key, base){
+    const s = state.scenario;
+    const t = state.tick;
+    if (s === "OVERHEATING" && (key==="internal_temperature"||key==="battery_temperature"||key==="electronics_temperature")){
+      const ramp = Math.min(28, t * 0.35);
+      return base + ramp;
+    }
+    if (s === "LOW_BATTERY" && key==="battery_voltage"){
+      return base - Math.min(3.2, t * 0.045);
+    }
+    if (s === "LOW_BATTERY" && key==="solar_voltage"){
+      return base - Math.min(12, t * 0.16);
+    }
+    if (s === "HIGH_CURRENT" && key==="battery_current"){
+      return base + Math.min(3.6, t * 0.06);
+    }
+    if (s === "HIGH_CURRENT" && key==="battery_voltage"){
+      return base - Math.min(2.0, t * 0.03);
+    }
+    if (s === "HIGH_CURRENT" && key==="internal_temperature"){
+      return base + Math.min(10, t * 0.14);
+    }
+    if (s === "COMM_LOSS" && key==="signal_strength"){
+      return base - Math.min(48, t * 0.7);
+    }
+    if (s === "COMM_LOSS" && key==="packet_loss"){
+      return Math.min(60, base + t * 0.9);
+    }
+    if (s === "RECOVERY"){
+      // pull every parameter back toward its baseline
+      const nominal = PARAMS[key].base;
+      const pull = Math.min(1, t * 0.05);
+      return base + (nominal - base) * pull;
+    }
+    return base;
+  }
+
+  function generatePacket(){
+    state.tick++;
+    state.orbitPhase += 0.02;
+    const daylight = (Math.sin(state.orbitPhase) + 1) / 2; // 0..1 orbital cycle
+
+    Object.keys(PARAMS).forEach(key=>{
+      state.prevValues[key] = state.values[key];
+      let v = PARAMS[key].base;
+
+      if (key === "solar_voltage"){
+        v = 4 + daylight * 15.5;
+      } else if (key === "internal_temperature" || key==="battery_temperature" || key==="electronics_temperature"){
+        v = PARAMS[key] ? PARAMS[key].base : 30;
+        v += Math.sin(state.tick*0.05) * 1.2; // periodic variation
+        v += state.values.power_consumption ? (state.values.power_consumption-5)*0.3 : 0; // load-related heating
+      } else if (key === "battery_voltage"){
+        v = PARAMS[key].base + (daylight-0.5)*1.1 - (state.values.battery_current-0.45)*0.6;
+      } else if (key === "battery_current" || key === "power_consumption" || key==="cpu_usage" || key==="memory_usage"){
+        v = PARAMS[key].base + Math.sin(state.tick*0.08)*PARAMS[key].base*0.08;
+      } else if (key === "signal_strength"){
+        v = PARAMS[key].base + Math.sin(state.tick*0.03)*4;
+      } else if (key === "packet_loss"){
+        v = Math.max(0, PARAMS[key].base + Math.sin(state.tick*0.1)*0.3);
+      }
+
+      v = scenarioInject(key, v);
+      v += gaussian() * (PARAMS[key].max-PARAMS[key].min) * 0.006; // sensor noise
+      v = Math.max(PARAMS[key].min, Math.min(PARAMS[key].max, v));
+
+      state.values[key] = v;
+      state.ema[key] = 0.25 * v + 0.75 * state.ema[key];
+
+      const hist = state.history[key];
+      hist.push({raw:v, ema:state.ema[key], t:state.tick});
+      if (hist.length > 90) hist.shift();
+    });
+
+    state.packetCount++;
+    state.seq++;
+    state.lastPacketAt = new Date();
+    runFaultEngine();
+    render();
+  }
+
+  /* ===================== events ===================== */
+  function nowIso(){
+    return new Date().toISOString().replace("T"," ").slice(0,19) + "Z";
+  }
+  function logEvent(type, message){
+    state.events.push({time:nowIso(), type, message});
+    if (state.events.length > 60) state.events.shift();
+  }
+
+  /* ===================== formatting ===================== */
+  function fmt(key, v){
+    if (v===null||v===undefined) return "--";
+    const decimals = key.includes("voltage")||key.includes("current")||key.includes("power") ? 2 : (key.includes("signal")?0:1);
+    return v.toFixed(decimals) + PARAMS[key].unit;
+  }
+  function statusOf(key, v){
+    const def = PARAMS[key];
+    if (def.isLow){
+      if (v<=def.crit) return "critical";
+      if (v<=def.warn) return "warning";
+    } else {
+      if (v>=def.crit) return "critical";
+      if (v>=def.warn) return "warning";
+    }
+    return "nominal";
+  }
+  function pad(n){return String(n).padStart(2,"0");}
+
+  /* ===================== rendering ===================== */
+  let activeChart = "internal_temperature";
+
+  function render(){
+    // status bar
+    document.getElementById("statMode").textContent = state.scenario;
+    document.getElementById("statScenario").textContent = state.scenario;
+    document.getElementById("statCount").textContent = state.packetCount;
+    document.getElementById("statRate").textContent = state.running && !state.paused ? (1000/state.speedMs).toFixed(1) : "0.0";
+    if (state.lastPacketAt){
+      const d = state.lastPacketAt;
+      document.getElementById("statLastPacket").textContent = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`;
+    }
+    if (state.startedAt){
+      const secs = Math.floor((Date.now()-state.startedAt)/1000);
+      const h=pad(Math.floor(secs/3600)), m=pad(Math.floor((secs%3600)/60)), s=pad(secs%60);
+      document.getElementById("statUptime").textContent = `${h}:${m}:${s}`;
+    }
+
+    const activeFaults = [...state.faults.values()].filter(f=>f.status!=="RECOVERED");
+    document.getElementById("statFaults").textContent = activeFaults.length;
+    document.getElementById("statFaults").style.color = activeFaults.length ? "var(--warning)" : "var(--nominal)";
+
+    // connection badge always shows online in this local demo
+    const connOn = state.running || state.packetCount>0;
+
+    // params
+    const grid = document.getElementById("paramGrid");
+    grid.innerHTML = "";
+    Object.keys(PARAMS).forEach(key=>{
+      const def = PARAMS[key];
+      const v = state.values[key];
+      const st = statusOf(key, v);
+      const div = document.createElement("div");
+      div.className = `param ${st}`;
+      div.innerHTML = `
+        <div class="k">${def.label}</div>
+        <div class="v">${v.toFixed(key.includes("voltage")||key.includes("current")?2:1)}<span class="u">${def.unit}</span></div>
+        <div class="status">${st.toUpperCase()}</div>`;
+      grid.appendChild(div);
+    });
+
+    // health
+    const {score, critCount, warnCount} = computeHealthScore();
+    const healthNum = document.getElementById("healthNum");
+    const healthState = document.getElementById("healthState");
+    const healthFill = document.getElementById("healthBarFill");
+    let color, label;
+    if (score>=90){color="var(--nominal)";label="NOMINAL";}
+    else if (score>=70){color="var(--info)";label="DEGRADED";}
+    else if (score>=40){color="var(--warning)";label="WARNING";}
+    else {color="var(--critical)";label="CRITICAL";}
+    healthNum.textContent = score;
+    healthNum.style.color = color;
+    healthState.textContent = label;
+    healthState.style.color = color;
+    healthFill.style.width = score + "%";
+    healthFill.style.background = color;
+
+    // fault chips + list
+    document.getElementById("critCount").textContent = critCount;
+    document.getElementById("warnCount").textContent = warnCount;
+    const faultList = document.getElementById("faultList");
+    if (activeFaults.length === 0){
+      faultList.innerHTML = `<div class="empty">No active faults. All parameters nominal.</div>`;
+    } else {
+      faultList.innerHTML = "";
+      activeFaults.slice().reverse().forEach(f=>{
+        const div = document.createElement("div");
+        div.className = `fault-item ${f.severity}`;
+        const paramLabel = PARAMS[f.param] ? PARAMS[f.param].label : f.param;
+        div.innerHTML = `
+          <div class="row1">
+            <span class="name">${paramLabel}</span>
+            <span class="sev">${f.severity}</span>
+          </div>
+          <div class="desc">${f.desc}</div>
+          <div class="meta">
+            <span>Rule: ${f.rule.replace(/_/g," ")}</span>
+            <span>${f.timestamp.slice(11,19)} UTC</span>
+          </div>
+          <button class="ack-btn" data-id="${f.id}" ${f.ack?"disabled":""}>${f.ack?"Acknowledged":"Acknowledge"}</button>
+        `;
+        faultList.appendChild(div);
+      });
+      faultList.querySelectorAll(".ack-btn").forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          const f = state.faults.get(btn.dataset.id);
+          if (f && !f.ack){
+            f.ack = true;
+            f.status = "ACKNOWLEDGED";
+            logEvent("scn", `Fault acknowledged: ${PARAMS[f.param]?PARAMS[f.param].label:f.param}`);
+            render();
+          }
+        });
+      });
+    }
+
+    // events
+    const eventList = document.getElementById("eventList");
+    eventList.innerHTML = "";
+    state.events.slice().reverse().forEach(ev=>{
+      const div = document.createElement("div");
+      div.className = `event-row ${ev.type}`;
+      div.innerHTML = `<span class="t">${ev.time.slice(11,19)}</span><span class="m">${ev.message}</span>`;
+      eventList.appendChild(div);
+    });
+
+    drawChart();
+  }
+
+  /* ===================== chart (canvas, no dependencies) ===================== */
+  function drawChart(){
+    const canvas = document.getElementById("chartCanvas");
+    const dpr = window.devicePixelRatio || 1;
+    const cssWidth = canvas.clientWidth || canvas.parentElement.clientWidth;
+    const cssHeight = 220;
+    canvas.width = cssWidth * dpr;
+    canvas.height = cssHeight * dpr;
+    canvas.style.height = cssHeight + "px";
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,cssWidth,cssHeight);
+
+    const key = activeChart;
+    const def = PARAMS[key];
+    const hist = state.history[key];
+    if (!hist || hist.length < 2) return;
+
+    const padL=40, padR=10, padT=14, padB=18;
+    const w = cssWidth-padL-padR, h = cssHeight-padT-padB;
+    const vMin = def.min, vMax = def.max;
+    const y = v => padT + h - ((v-vMin)/(vMax-vMin))*h;
+    const x = i => padL + (i/(hist.length-1))*w;
+
+    // grid lines
+    ctx.strokeStyle = "rgba(159,176,198,0.08)";
+    ctx.lineWidth = 1;
+    for (let i=0;i<=4;i++){
+      const gy = padT + (h/4)*i;
+      ctx.beginPath(); ctx.moveTo(padL,gy); ctx.lineTo(padL+w,gy); ctx.stroke();
+    }
+
+    // threshold lines
+    function thresholdLine(val, color){
+      if (val<vMin||val>vMax) return;
+      const ty = y(val);
+      ctx.strokeStyle = color; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+      ctx.beginPath(); ctx.moveTo(padL,ty); ctx.lineTo(padL+w,ty); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    thresholdLine(def.warn, "rgba(245,185,66,0.55)");
+    thresholdLine(def.crit, "rgba(242,65,65,0.55)");
+
+    // raw line
+    ctx.strokeStyle = "rgba(159,176,198,0.45)";
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    hist.forEach((p,i)=>{ i===0?ctx.moveTo(x(i),y(p.raw)):ctx.lineTo(x(i),y(p.raw)); });
+    ctx.stroke();
+
+    // ema line
+    ctx.strokeStyle = "#4ea8de";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    hist.forEach((p,i)=>{ i===0?ctx.moveTo(x(i),y(p.ema)):ctx.lineTo(x(i),y(p.ema)); });
+    ctx.stroke();
+
+    // y-axis labels
+    ctx.fillStyle = "#5f7086";
+    ctx.font = "9.5px monospace";
+    ctx.textAlign = "right";
+    [vMax, (vMax+vMin)/2, vMin].forEach(v=>{
+      ctx.fillText(v.toFixed(1), padL-6, y(v)+3);
+    });
+    ctx.textAlign = "left";
+    ctx.fillText(def.label + " (" + def.unit + ")", padL, 11);
+  }
+
+  /* ===================== UI wiring ===================== */
+  function buildScenarioButtons(){
+    const row = document.getElementById("scenarioRow");
+    Object.keys(SCENARIOS).forEach(key=>{
+      const btn = document.createElement("button");
+      btn.className = "scenario-btn" + (key===state.scenario?" active":"");
+      btn.textContent = SCENARIOS[key].label;
+      btn.dataset.scenario = key;
+      btn.addEventListener("click", ()=>setScenario(key));
+      row.appendChild(btn);
+    });
+    updateScenarioDesc();
+  }
+  function setScenario(key){
+    if (state.scenario === key) return;
+    state.scenario = key;
+    state.tick = 0;
+    document.querySelectorAll(".scenario-btn").forEach(b=>{
+      b.classList.toggle("active", b.dataset.scenario===key);
+    });
+    updateScenarioDesc();
+    logEvent("scn", `Scenario changed: ${key}`);
+    render();
+  }
+  function updateScenarioDesc(){
+    document.getElementById("scenarioDesc").textContent = SCENARIOS[state.scenario].desc;
+  }
+
+  function buildChartTabs(){
+    const tabs = document.getElementById("chartTabs");
+    CHART_PARAMS.forEach(key=>{
+      const btn = document.createElement("button");
+      btn.className = "chart-tab" + (key===activeChart?" active":"");
+      btn.textContent = PARAMS[key].label;
+      btn.dataset.key = key;
+      btn.addEventListener("click", ()=>{
+        activeChart = key;
+        tabs.querySelectorAll(".chart-tab").forEach(b=>b.classList.toggle("active", b.dataset.key===key));
+        drawChart();
+      });
+      tabs.appendChild(btn);
+    });
+  }
+
+  function startSim(){
+    if (state.intervalHandle) return;
+    state.running = true; state.paused = false;
+    if (!state.startedAt) state.startedAt = Date.now();
+    state.intervalHandle = setInterval(generatePacket, state.speedMs);
+    document.getElementById("btnPlay").disabled = true;
+    document.getElementById("btnPause").disabled = false;
+    document.getElementById("btnStop").disabled = false;
+    logEvent("scn", "Telemetry started");
+  }
+  function pauseSim(){
+    if (state.intervalHandle){ clearInterval(state.intervalHandle); state.intervalHandle=null; }
+    state.paused = true; state.running = false;
+    document.getElementById("btnPlay").disabled = false;
+    document.getElementById("btnPause").disabled = true;
+    logEvent("scn", "Telemetry paused");
+    render();
+  }
+  function stopSim(){
+    if (state.intervalHandle){ clearInterval(state.intervalHandle); state.intervalHandle=null; }
+    state.running = false; state.paused = false; state.startedAt = null;
+    document.getElementById("btnPlay").disabled = false;
+    document.getElementById("btnPause").disabled = true;
+    document.getElementById("btnStop").disabled = true;
+    logEvent("scn", "Telemetry stopped");
+    render();
+  }
+  function resetSim(){
+    stopSim();
+    rand = mulberry32(42);
+    state.tick=0; state.packetCount=0; state.seq=0; state.faultSeq=0;
+    state.faults.clear(); state.events.length = 0; state.orbitPhase=0;
+    Object.keys(PARAMS).forEach(k=>{
+      state.values[k]=PARAMS[k].base; state.prevValues[k]=PARAMS[k].base;
+      state.ema[k]=PARAMS[k].base; state.history[k]=[]; state.stuckCounters[k]=0;
+    });
+    logEvent("scn", "System reset");
+    render();
+  }
+
+  document.getElementById("btnPlay").addEventListener("click", startSim);
+  document.getElementById("btnPause").addEventListener("click", pauseSim);
+  document.getElementById("btnStop").addEventListener("click", stopSim);
+  document.getElementById("btnReset").addEventListener("click", resetSim);
+  document.getElementById("speedSelect").addEventListener("change", (e)=>{
+    state.speedMs = Number(e.target.value);
+    if (state.intervalHandle){
+      clearInterval(state.intervalHandle);
+      state.intervalHandle = setInterval(generatePacket, state.speedMs);
+    }
+  });
+
+  // pause updates when tab hidden (performance requirement)
+  document.addEventListener("visibilitychange", ()=>{
+    if (document.visibilityState === "visible") render();
+  });
+  window.addEventListener("resize", ()=>{ if(state.packetCount>0) drawChart(); });
+
+  buildScenarioButtons();
+  buildChartTabs();
+  logEvent("scn", "STAFDS dashboard initialized");
+  render();
+})();
+</script>
+</body>
+</html>
